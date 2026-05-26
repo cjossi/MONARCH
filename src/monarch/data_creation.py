@@ -253,6 +253,8 @@ def variability_indices_normalisation(
     """
 
     # The normalisation is false here, to correct.
+
+
     if normalisation_type == 'global':
         # take only the columns corresponding to numeral values:
         data = extracted_data.drop(columns=[
@@ -262,8 +264,14 @@ def variability_indices_normalisation(
         normalised_data = pd.DataFrame(index = range(1), columns=data.columns)
 
         for column in data.columns:
-            mean = data[column].mean()
-            std = data[column].std()
+            mean: pd.Series = data[column].mean(axis=0)
+            
+            mean = float(mean.iloc[0])
+
+            print(f"Mean of {column}: {mean}")
+
+            std = data[column].std(axis=0)
+            print(f"Standard deviation of {column}: {std}")
 
             normalised_data[column] = data[column].apply(
                 lambda x: z_score_normalisation(x, mean, std)
