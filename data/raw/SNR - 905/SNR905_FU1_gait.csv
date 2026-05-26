@@ -1,0 +1,2 @@
+mean_velocity_left (m/s),mean_velocity_right (m/s),mean_cadence_left (Hz),mean_cadence_right (Hz),mean_stride_length_left (m),mean_stride_length_right (m),mean_double_support_time (s),mean_single_support_time_left (s),mean_single_support_time_right (s),mean_double_support_time (%),mean_single_support_time_left (%),mean_single_support_time_right (%),CoV_velocity_left (%),CoV_velocity_right (%),CoV_stride_length_left (%),CoV_stride_length_right (%)
+1.497,1.505,1.029,1.032,1.453,1.462,0.272,0.353,0.356,29.1,35.3,35.6,3.73,3.81,2.86,2.88
