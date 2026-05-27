@@ -5,14 +5,20 @@
 # ------------------------------------------------------------------------------
 
 # Third Party Imports
+from numpy import log
+from pathlib import Path
 import pandas as pd
 
 # Local Imports
 import monarch.config as config
+from monarch.constant import EPSILON
+
 
 def data_extraction() -> pd.DataFrame:
     """
-    Future implementation will involve reading raw data from a CSV file
+    Read the data from a csv file and return it as a Pandas DataFrame.
+    The csv file is already preprocessed and contains the gait parameters 
+    extracted from the raw data. This is done by WideLog.
 
     Returns
     -------
@@ -22,13 +28,12 @@ def data_extraction() -> pd.DataFrame:
 
     cfg = config.Config.load_from_yaml()
 
-    gait_parameters_folder = cfg.gait_parameters_folder
+    gait_parameters_folder: Path = cfg.gait_parameters_folder
 
     # Read csv file:
     gait_parameters = pd.read_csv(
         gait_parameters_folder / 'gait_parameters.csv'
     )
-
 
     return gait_parameters
 
@@ -37,83 +42,85 @@ def data_extraction() -> pd.DataFrame:
 # ------------------------------------------------------------------------------
 
 def calculate_asymmetry_variability_indice(
-        CoV_left: float,
-        CoV_right: float
-) -> float:
+        left: pd.Series,
+        right: pd.Series
+) -> pd.Series:
     """
-    Calculate the asymmetry index based on the coefficient of variation (CoV)
-    for the left and right sides.
+    Calculate the asymmetry index for a given pair of left and right 
+    gait parameters.
 
     Parameters
     ----------
-    CoV_left : float
-        Coefficient of variation for the left side
-    CoV_right : float
-        Coefficient of variation for the right side
+    left : Series
+        Left gait parameter (e.g., stride length, velocity, CoV)
+    right : Series
+        Right gait parameter (e.g., stride length, velocity, CoV)
 
     Returns
     -------
-    float
+    Series
         The calculated asymmetry index
     """
 
-    asymmetry_index = (CoV_left - CoV_right) / (CoV_left + CoV_right)
+    asymmetry_index: pd.Series = (left - right) / (left + right + EPSILON)
 
     return asymmetry_index
 
 def calculate_spatio_temporal_variability_indice(
-        CoV_stride_length: float, 
-        CoV_velocity: float
-) -> float:
+        CoV_stride_length: pd.Series, 
+        CoV_velocity: pd.Series
+) -> pd.Series:
     """
     Calculate the spatio-temporal variability indice based on the coefficient of 
     variation (CoV) for stride length and stride time.
 
     Parameters
     ----------
-    CoV_stride_length : float
+    CoV_stride_length : Series
         Coefficient of variation for stride length
-    CoV_velocity : float
+    CoV_velocity : Series
         Coefficient of variation for velocity
 
     Returns
     -------
-    float
+    Series
         The calculated spatio-temporal variability indice
     """
 
-    spatio_temporal_indice = CoV_stride_length / CoV_velocity
+    spatio_temporal_indice: pd.Series = pd.Series(
+        log(CoV_stride_length / CoV_velocity + EPSILON)
+    )
 
     return spatio_temporal_indice
 
 def calculate_global_variability_indice(
-        Cov_stride_length_left: float,
-        Cov_stride_length_right: float, 
-        CoV_velocity_left: float,
-        CoV_velocity_right: float
-) -> float:
+        Cov_stride_length_left: pd.Series,
+        Cov_stride_length_right: pd.Series, 
+        CoV_velocity_left: pd.Series,
+        CoV_velocity_right: pd.Series
+) -> pd.Series:
     """
     Calculate the global variability indice based on the coefficient
     of variation (CoV) for stride length and velocity.
 
     Parameters
     ----------
-    Cov_stride_length_left : float
+    Cov_stride_length_left : Series
         Coefficient of variation for stride length (left side)
-    Cov_stride_length_right : float
+    Cov_stride_length_right : Series
         Coefficient of variation for stride length (right side)
-    CoV_velocity_left : float
+    CoV_velocity_left : Series
         Coefficient of variation for velocity (left side)
-    CoV_velocity_right : float
+    CoV_velocity_right : Series
         Coefficient of variation for velocity (right side)
 
     Returns
     -------
-    float
+    Series
         The calculated global variability indice
     """
 
-    global_variability_indice = (
+    global_variability_indice: pd.Series = (
         Cov_stride_length_left +
         Cov_stride_length_right + 
         CoV_velocity_left + 
@@ -122,66 +129,41 @@ def calculate_global_variability_indice(
 
     return global_variability_indice
 
-def calculate_support_asymmetry_indice(
-        single_support_time_left: float,
-        single_support_time_right: float
-) -> float:
-    """
-    Calculate the support asymmetry index based on the single and double
-    support times.
-
-    Parameters
-    ----------
-    single_support_time_left : float
-        Single support time for the left side
-    single_support_time_right : float
-        Single support time for the right side
-
-    Returns
-    -------
-    float
-        The calculated support asymmetry index
-    """
-
-    support_asymmetry_indice = (
-        (single_support_time_left - single_support_time_right) / 
-        (single_support_time_left + single_support_time_right)
-    )
-
-    return support_asymmetry_indice
-
 def calculate_variability_indices(
         extracted_data: pd.DataFrame
-) -> tuple[float, float, float, float]:
+) -> pd.DataFrame:
     """
     Calculate all variability indices.
 
     Returns
     -------
-    tuple[float, float, float, float]
-        A tuple containing the values of the calculated variability indices
+    pd.DataFrame
+        A DataFrame containing the values of the calculated variability indices
     """
 
-    CoV_stride_length_left = extracted_data[
+    CoV_stride_length_left: pd.Series = extracted_data[
         'CoV_stride_length_left (%)'
-    ].iloc[0]
-    CoV_stride_length_right = extracted_data[
+    ]
+    CoV_stride_length_right: pd.Series = extracted_data[
         'CoV_stride_length_right (%)'
-    ].iloc[0]
-    CoV_velocity_left = extracted_data[
+    ]
+    CoV_velocity_left: pd.Series = extracted_data[
         'CoV_velocity_left (%)'
-    ].iloc[0]
-    CoV_velocity_right = extracted_data[
+    ]
+    CoV_velocity_right: pd.Series = extracted_data[
         'CoV_velocity_right (%)'
-    ].iloc[0]
-    single_support_time_left = extracted_data[
+    ]
+    single_support_time_left: pd.Series = extracted_data[
         'mean_single_support_time_left (s)'
-    ].iloc[0]
-    single_support_time_right = extracted_data[
+    ]
+    single_support_time_right: pd.Series = extracted_data[
         'mean_single_support_time_right (s)'
-    ].iloc[0]
+    ]
 
-    asymmetry_index = calculate_asymmetry_variability_indice(
+    CoV_velocity_asymmetry_index = calculate_asymmetry_variability_indice(
+        CoV_velocity_left, CoV_velocity_right
+    )
+    CoV_stride_length_asymmetry_index = calculate_asymmetry_variability_indice(
         CoV_stride_length_left, CoV_stride_length_right
     )
     spatio_temporal_indice = calculate_spatio_temporal_variability_indice(
@@ -191,49 +173,26 @@ def calculate_variability_indices(
         CoV_stride_length_left, CoV_stride_length_right, 
         CoV_velocity_left, CoV_velocity_right
     )
-    support_asymmetry_indice = calculate_support_asymmetry_indice(
+    support_asymmetry_indice = calculate_asymmetry_variability_indice(
         single_support_time_left, single_support_time_right
     )
 
-    return (
-        asymmetry_index,
-        spatio_temporal_indice,
-        global_variability_indice,
-        support_asymmetry_indice
-    )
+    return pd.DataFrame({
+        'CoV_stride_length_asymmetry_index': CoV_stride_length_asymmetry_index,
+        'CoV_velocity_asymmetry_index': CoV_velocity_asymmetry_index,
+        'spatio_temporal_indice': spatio_temporal_indice,
+        'global_variability_indice': global_variability_indice,
+        'support_asymmetry_indice': support_asymmetry_indice
+    })
 
-def z_score_normalisation(value: float, mean: float, std: float) -> float:
-    """
-    Perform z-score normalization on a given value.
+# ------------------------------------------------------------------------------
+# Normalisation
+# ------------------------------------------------------------------------------
 
-    Parameters
-    ----------
-    value : float
-        The value to be normalized
-    mean : float
-        The mean of the dataset
-    std : float
-        The standard deviation of the dataset
-
-    Returns
-    -------
-    float
-        The z-score normalized value
-    """
-
-    if std == 0:
-        raise ValueError(
-            "Standard deviation cannot be zero for z-score normalization."
-        )
-
-    z_score = (value - mean) / std
-
-    return z_score
-
-def variability_indices_normalisation(
+def z_score_normalisation(
         extracted_data: pd.DataFrame,
         normalisation_type: str
-) -> tuple[float, float, float, float]:
+) -> pd.DataFrame:
     """
     Compute the z-score normalization for all variability indices.
     
@@ -248,46 +207,49 @@ def variability_indices_normalisation(
 
     Returns
     -------
-    tuple[float, float, float, float]
-        A tuple containing the normalized values of the variability indices
+    pd.DataFrame
+        A DataFrame containing the normalized values of the variability indices
     """
 
-    # The normalisation is false here, to correct.
+    # =====
+    # For the test data, no need to drop any column.
+    # =====
+    #data: pd.DataFrame = extracted_data.drop(columns=[
+    #    'timeline_stage',
+    #    'test_type',
+    #    'snr_id'
+    #])
 
+    #normalised_data: pd.DataFrame = data.copy()
+
+    normalised_data: pd.DataFrame = extracted_data.copy()
+
+    data: pd.DataFrame = extracted_data.copy()
 
     if normalisation_type == 'global':
-        # take only the columns corresponding to numeral values:
-        data = extracted_data.drop(columns=[
-            'timeline_stage', 'test_type', 'snr_id'
-        ])
-
-        normalised_data = pd.DataFrame(index = range(1), columns=data.columns)
-
         for column in data.columns:
-            mean: pd.Series = data[column].mean(axis=0)
-            
-            mean = float(mean.iloc[0])
+            mean: float = data[column].mean()
+            std: float = data[column].std()
 
-            print(f"Mean of {column}: {mean}")
-
-            std = data[column].std(axis=0)
-            print(f"Standard deviation of {column}: {std}")
-
-            normalised_data[column] = data[column].apply(
-                lambda x: z_score_normalisation(x, mean, std)
+            normalised_data[column] = (
+                (data[column] - mean) / (std + EPSILON)
             )
-        
-        print("Global Normalization:")
-        print(normalised_data)
 
-            
+        return normalised_data
 
-
-
-    return None
-
+    else:
+        raise ValueError(f"Invalid normalisation type: {normalisation_type}")
 
 if __name__ == "__main__":
-    extracted_data = data_extraction()
+    extracted_data: pd.DataFrame = data_extraction()
 
-    variability_indices_normalisation(extracted_data, 'global')
+    engineered_features: pd.DataFrame = calculate_variability_indices(
+        extracted_data
+    )
+
+    full_data: pd.DataFrame = pd.concat(
+        [extracted_data, engineered_features],
+        axis=1
+    )
+
+    normalised_data: pd.DataFrame = z_score_normalisation(full_data, 'global')

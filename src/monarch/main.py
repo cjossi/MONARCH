@@ -9,44 +9,38 @@
 # Standard Imports
 
 # Third Party Imports
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import seaborn as sns
 
 # Local Imports
-from monarch.data_creation import data_extraction
+from monarch.data_analysis import correlation_matrix
+from monarch.data_creation import (
+    data_extraction,
+    calculate_variability_indices,
+    z_score_normalisation
+)
+from monarch.data_analysis import PCA_analysis
 
-
-def correlation_matrix(df: pd.DataFrame) -> None:
-    """
-    Create a correlation matrix to visualize the relationships between 
-    different gait parameters
-    """
-
-    corr_matrix = df.corr()
-
-    print("Correlation Matrix:")
-    print(corr_matrix)
-
-    # Generate mask for lower triangle
-    mask = np.tril(np.ones_like(corr_matrix, dtype=bool))
-
-    ax = sns.heatmap(corr_matrix, annot=True, cmap='seismic', mask=mask)
-    ax.set(xlabel='', ylabel='')
-    ax.xaxis.tick_top()
-
-    plt.title('Correlation Matrix of Gait Parameters')
-    plt.show()
-
-    return None
 
 def main() -> None:
     # Step 1: Data Extraction
     gait_data = data_extraction()
 
-    # Step 2: Correlation Matrix
-    #correlation_matrix(gait_data)
+    # Step 2: Variability Indices Calculation
+    variability_indices = calculate_variability_indices(gait_data)
+
+    full_data = pd.concat([gait_data, variability_indices], axis=1)
+
+    # Step 3: Data Normalisation
+    normalised_data = z_score_normalisation(full_data, 'global')
+
+    # Step 4: Correlation Matrix
+    correlation_matrix(normalised_data)
+    print("Correlation matrix generated successfully.")
+
+    # Step 5: PCA Analysis
+    PCA_analysis(full_data, normalised_data)
+    print("PCA analysis completed successfully.")
+    
 
     return None
 
