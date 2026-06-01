@@ -4,12 +4,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from sklearn.decomposition import PCA
+from scipy.cluster.hierarchy import (
+    dendrogram,
+    linkage
+)
 from sklearn.cluster import (
     KMeans,
     DBSCAN
 )
+from sklearn.decomposition import PCA
+import seaborn as sns
 import umap
 
 # Local Imports
@@ -102,6 +106,30 @@ def PCA_analysis(
 
 
     # ===== Scree Plot =====
+    Scree_plot(
+        my_pca=my_pca,
+        cumulative_variance=cumulative_variance
+    )
+
+    # ===== Biplot =====
+    principal_components_8 = PCA_biplot(
+        original_data=original_data,
+        normalised_data=normalised_data,
+        features_names=normalised_data.columns.tolist(),
+        pc1=0,
+        pc2=1
+    )
+
+    return principal_components_8
+
+def Scree_plot(
+        my_pca: PCA,
+        cumulative_variance: np.ndarray
+) -> None:
+    """
+    Create a scree plot to visualize the explained variance ratio of each 
+    principal component.
+    """
 
     plt.figure(figsize=(10, 6))
     plt.bar(
@@ -124,19 +152,8 @@ def PCA_analysis(
     plt.ylabel('Explained Variance Ratio')
     plt.title('Scree Plot')
     plt.show()
-
-    # ===== Biplot =====
-
-    principal_components_8 = PCA_biplot(
-        original_data=original_data,
-        normalised_data=normalised_data,
-        features_names=normalised_data.columns.tolist(),
-        pc1=0,
-        pc2=1
-    )
-
-    return principal_components_8
-
+    
+    return None
 
 def PCA_biplot(
         original_data: pd.DataFrame,
@@ -259,6 +276,8 @@ def UMAP_analysis(
         The transformed data containing the UMAP embedding.
     """
 
+    # tuning UMAP parameters for better separation of participants 
+    # in the embedding space
     reducer = umap.UMAP(
         n_neighbors=5,      # Local for small dataset
         min_dist=0.3,       # Allow some clustering but not too tight
@@ -304,7 +323,7 @@ def KMeans_clustering(
     """
 
     kmeans = KMeans(
-        n_clusters=3,
+        n_clusters=3,   # Chosen for a first attempt to identify distinct groups
         random_state=42
     )
 
@@ -358,4 +377,41 @@ def DBSCAN_clustering(
     plt.title('DBSCAN Clustering of Gait Data', fontsize=16)
 
     plt.grid()
+    plt.show()
+
+def hierarchical_clustering(
+        principal_components_8: np.ndarray,
+        original_data: pd.DataFrame
+) -> None:
+    """
+    Perform hierarchical clustering to identify distinct groups of participants 
+    based on their gait parameters.
+    """
+
+    linked = linkage(
+        principal_components_8, 
+        method='ward'
+    )
+
+    plt.figure(figsize=(12, 10))
+
+    labels = [
+        f'{participant}_{timeline}'
+        for participant, timeline in zip(
+            original_data['snr_id'], 
+            original_data['timeline_stage']
+        )
+    ]
+
+    dendrogram(
+        linked,
+        labels=labels
+    )
+
+    plt.title('Hierarchical Clustering Dendrogram')
+    plt.xlabel('Sample Index')
+    plt.ylabel('Distance')
+
+    plt.xticks(rotation=45, ha='right', fontsize=8)
+
     plt.show()

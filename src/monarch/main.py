@@ -16,10 +16,12 @@ from monarch.data_analysis import (
     correlation_matrix,
     DBSCAN_clustering,
     KMeans_clustering,
+    hierarchical_clustering,
     PCA_analysis,
     UMAP_analysis,
 )
 from monarch.data_creation import (
+    data_cleaning,
     data_extraction,
     calculate_variability_indices,
     z_score_normalisation
@@ -28,10 +30,11 @@ from monarch.data_creation import (
 
 def main() -> None:
     # Step 1: Data Extraction
-    gait_data = data_extraction()
+    gait_data = data_extraction('dataset_A')
+    data_cleaning(gait_data)
 
     # Step 2: Variability Indices Calculation
-    variability_indices = calculate_variability_indices(gait_data)
+    variability_indices = calculate_variability_indices(gait_data, 'dataset_A')
 
     full_data = pd.concat([gait_data, variability_indices], axis=1)
 
@@ -39,16 +42,13 @@ def main() -> None:
     normalised_data = z_score_normalisation(full_data, 'global')
 
     # Step 4: Correlation Matrix
-    #correlation_matrix(normalised_data)
-    #print("Correlation matrix generated successfully.")
+    correlation_matrix(normalised_data)
 
     # Step 5: PCA Analysis
     principal_components_8 = PCA_analysis(full_data, normalised_data)
-    print("PCA analysis completed successfully.")
 
     # Step 6: UMAP Analysis
     embedding_umap = UMAP_analysis(full_data, principal_components_8)
-    print("UMAP analysis completed successfully.")
 
     # Step 7: K-Means Clustering
     KMeans_clustering(principal_components_8, embedding_umap)
@@ -57,6 +57,7 @@ def main() -> None:
     DBSCAN_clustering(principal_components_8, embedding_umap)
 
     # Step 9: Hierarchical Clustering
+    hierarchical_clustering(principal_components_8, full_data)
 
     
 

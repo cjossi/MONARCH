@@ -1,1 +1,3 @@
 gait_parameters_folder: "/Users/corentin/Documents/EPFL/PDM/MONARCH/data/processed"
+exported_data_folder: "/Users/corentin/Documents/EPFL/PDM/MONARCH/data/exported"
+aggregated_dataset_path: "/Users/corentin/Documents/EPFL/PDM/MONARCH/data/aggregated/aggregated_dataset.csv"
