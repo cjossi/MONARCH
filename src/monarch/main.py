@@ -12,6 +12,7 @@
 import pandas as pd
 
 # Local Imports
+import monarch.config as config
 from monarch.data_analysis import (
     correlation_matrix,
     DBSCAN_clustering,
@@ -21,45 +22,69 @@ from monarch.data_analysis import (
     UMAP_analysis,
 )
 from monarch.data_creation import (
+    aggregated_dataset,
     data_cleaning,
     data_extraction,
     calculate_variability_indices,
     z_score_normalisation
 )
 
+def dataset_analysis(
+        dataset_name: str
+) -> None:
+        # ===== Step 1: Data Extraction =====
+    gait_data: pd.DataFrame = data_extraction(dataset_name)
 
-def main() -> None:
-    # Step 1: Data Extraction
-    gait_data = data_extraction('dataset_A')
     data_cleaning(gait_data)
 
-    # Step 2: Variability Indices Calculation
-    variability_indices = calculate_variability_indices(gait_data, 'dataset_A')
+    if dataset_name == 'dataset_A':
+        aggregated_data: pd.DataFrame = gait_data
 
-    full_data = pd.concat([gait_data, variability_indices], axis=1)
+    elif dataset_name == 'dataset_B':
+        aggregated_data: pd.DataFrame = aggregated_dataset(
+            gait_data
+        )
+    else:
+        raise ValueError(f"Invalid dataset name: {dataset_name}")
 
-    # Step 3: Data Normalisation
-    normalised_data = z_score_normalisation(full_data, 'global')
+    # ===== Step 2: Variability Indices Calculation =====
+    variability_indices: pd.DataFrame = calculate_variability_indices(
+        aggregated_data, 
+        dataset_name
+    )
 
-    # Step 4: Correlation Matrix
+    full_data: pd.DataFrame = pd.concat(
+        [aggregated_data, variability_indices], 
+        axis=1
+    )
+
+    # ===== Step 3: Data Normalisation =====
+    normalised_data: pd.DataFrame = z_score_normalisation(
+        full_data, 
+        'global'
+    )
+
+    # ===== Step 4: Correlation Matrix =====
     correlation_matrix(normalised_data)
 
-    # Step 5: PCA Analysis
+    # ===== Step 5: PCA Analysis =====
     principal_components_8 = PCA_analysis(full_data, normalised_data)
 
-    # Step 6: UMAP Analysis
+    # ===== Step 6: UMAP Analysis =====
     embedding_umap = UMAP_analysis(full_data, principal_components_8)
 
-    # Step 7: K-Means Clustering
+    # ===== Step 7: K-Means Clustering =====
     KMeans_clustering(principal_components_8, embedding_umap)
 
-    # Step 8: DBSCAN Clustering
+    # ===== Step 8: DBSCAN Clustering =====
     DBSCAN_clustering(principal_components_8, embedding_umap)
 
-    # Step 9: Hierarchical Clustering
+    # ===== Step 9: Hierarchical Clustering =====
     hierarchical_clustering(principal_components_8, full_data)
 
-    
+
+def main() -> None:
+    dataset_analysis('dataset_B')
 
     return None
 

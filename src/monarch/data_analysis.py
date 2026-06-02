@@ -37,7 +37,7 @@ def correlation_matrix(df: pd.DataFrame) -> None:
 
     ax = sns.heatmap(
         corr_matrix, 
-        annot=True, 
+        annot=False, 
         cmap='seismic', 
         mask=mask,
         vmin=-1, 
@@ -188,7 +188,12 @@ def PCA_biplot(
     """
     
     # ===== PCA =====
-    pca_8: PCA = PCA(n_components=8)
+    rank = np.linalg.matrix_rank(normalised_data)
+    n_components: int = min(
+        8,
+        rank
+    )
+    pca_8: PCA = PCA(n_components=n_components)
 
     principal_components_8: np.ndarray = pca_8.fit_transform(normalised_data)
 

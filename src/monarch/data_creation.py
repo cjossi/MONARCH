@@ -5,7 +5,7 @@
 # ------------------------------------------------------------------------------
 
 # Third Party Imports
-from numpy import log
+import numpy as np
 from pathlib import Path
 import pandas as pd
 
@@ -68,6 +68,9 @@ def data_cleaning(extracted_data: pd.DataFrame) -> None:
     # NaN check
     print(extracted_data.isna().sum())
     print(extracted_data.isna().mean() * 100)
+
+    # Infinite values check
+    print(np.isinf(extracted_data.select_dtypes(include=np.number)).sum())
 
     # Check types
     print(extracted_data.dtypes)
@@ -187,7 +190,7 @@ def calculate_spatio_temporal_variability_indice(
     """
 
     spatio_temporal_indice: pd.Series = pd.Series(
-        log((CoV_spatial + EPSILON) / (CoV_temporal + EPSILON))
+        np.log((CoV_spatial + EPSILON) / (CoV_temporal + EPSILON))
     )
 
     return spatio_temporal_indice
@@ -363,6 +366,7 @@ def calculate_variability_indices(
 # ------------------------------------------------------------------------------
 # Normalisation
 # ------------------------------------------------------------------------------
+
 def z_score_normalisation(
         extracted_data: pd.DataFrame,
         normalisation_type: str
@@ -406,6 +410,10 @@ def z_score_normalisation(
 
     else:
         raise ValueError(f"Invalid normalisation type: {normalisation_type}")
+
+# ------------------------------------------------------------------------------
+# Main Function
+# ------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     extracted_data: pd.DataFrame = data_extraction('dataset_B')
