@@ -1,5 +1,8 @@
 # MONARCH
-# Motion Observation and Neuromotor Analysis for Rehabilitation and Clinical Health
+# -------
+# Motion Observation and Neuromotor Analysis for Rehabilitation
+# and Clinical Health
+#
 # Author: Corentin Jossi
 # Date: 20.05.2026
 # Description: This script serves as the main entry point 
@@ -35,17 +38,14 @@ def dataset_analysis(
         # ===== Step 1: Data Extraction =====
     gait_data: pd.DataFrame = data_extraction(dataset_name)
 
-    data_cleaning(gait_data)
+    cleaned_gait_data: pd.DataFrame = data_cleaning(gait_data)
 
-    if dataset_name == 'dataset_A':
-        aggregated_data: pd.DataFrame = gait_data
-
-    elif dataset_name == 'dataset_B':
+    if dataset_name != 'dataset_A':
         aggregated_data: pd.DataFrame = aggregated_dataset(
-            gait_data
+            cleaned_gait_data
         )
     else:
-        raise ValueError(f"Invalid dataset name: {dataset_name}")
+        aggregated_data: pd.DataFrame = cleaned_gait_data
 
     # ===== Step 2: Variability Indices Calculation =====
     variability_indices: pd.DataFrame = calculate_variability_indices(
@@ -63,6 +63,8 @@ def dataset_analysis(
         full_data, 
         'global'
     )
+
+    print(normalised_data.head())
 
     # ===== Step 4: Correlation Matrix =====
     correlation_matrix(normalised_data)
@@ -84,7 +86,7 @@ def dataset_analysis(
 
 
 def main() -> None:
-    dataset_analysis('dataset_B')
+    dataset_analysis('dataset_A')
 
     return None
 

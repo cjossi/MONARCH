@@ -11,8 +11,10 @@ import pandas as pd
 
 # Local Imports
 import monarch.config as config
-from monarch.constant import EPSILON
-
+from monarch.constant import (
+    EPSILON,
+    DLSM_NO_PCA
+)
 
 def data_extraction(
         dataset: str
@@ -36,25 +38,24 @@ def data_extraction(
         gait_parameters = pd.read_csv(
             gait_parameters_folder / 'gait_parameters.csv'
         )
-
     elif dataset == 'dataset_B':
         gait_parameters = pd.read_csv(
             gait_parameters_folder / 'gait_parameters_outcome.csv'
         )
     elif dataset == 'dataset_dlsm':
         gait_parameters = pd.read_csv(
-            gait_parameters_folder / 'gait_parameters_dlsm.csv'
+            gait_parameters_folder / 'dlsm_parameters.csv'
         )
     elif dataset == 'dataset_clinical':
         gait_parameters = pd.read_csv(
             gait_parameters_folder / 'gait_parameters_clinical.csv'
         )
     else:
-        raise ValueError(f"Invalid dataset: {dataset}")
+        raise ValueError(f"Invalid dataset for data extraction: {dataset}")
 
     return gait_parameters
 
-def data_cleaning(extracted_data: pd.DataFrame) -> None:
+def data_cleaning(extracted_data: pd.DataFrame) -> pd.DataFrame:
     """
     Clean the extracted data by handling missing values, outliers and impossible
     values.
@@ -64,6 +65,10 @@ def data_cleaning(extracted_data: pd.DataFrame) -> None:
     extracted_data : pd.DataFrame
         The DataFrame containing the extracted gait parameters
     """
+
+    if "Timestamp" in extracted_data.columns:
+        extracted_data.drop("Timestamp", axis=1, inplace=True)
+        print("Dropped 'Timestamp' column from the dataset.")
 
     # NaN check
     print(extracted_data.isna().sum())
@@ -77,6 +82,7 @@ def data_cleaning(extracted_data: pd.DataFrame) -> None:
 
     # Impossible values check
     # to implement
+    return extracted_data
 
 # ------------------------------------------------------------------------------
 # Mean, Standard Deviation and Covariance Calculation
@@ -117,7 +123,10 @@ def aggregated_dataset(
         }
 
         for column in group_data.columns:
-            if column not in ['snr_id', 'test_type', 'timeline_stage']:
+            if column not in (
+                ['snr_id', 'test_type', 'timeline_stage'] + 
+                DLSM_NO_PCA
+                ):
                 row[f'mean_{column}'] = group_data[column].mean()
                 row[f'std_{column}'] = group_data[column].std(ddof=0)
                 row[f'CoV_{column} (%)'] = calculate_covariance(
@@ -358,8 +367,41 @@ def calculate_variability_indices(
         features['spatio_temporal_indice'] = spatio_temporal_indice
         features['global_variability_indice'] = global_variability_indice
 
+    elif dataset == 'dataset_dlsm':
+        # ===== Calculate the asymmetry indices =====
+        ASYMMETRY_COLUMNS = {
+            "Mean_AC_wrist_asymmetry_index":(
+                'mean_AC_wrist_l',
+                'mean_AC_wrist_r'
+            ),
+            "Mean_AC_ankle_asymmetry_index":(
+                'mean_AC_ankle_l',
+                'mean_AC_ankle_r'
+            )
+        }
+
+        features = {}
+
+        for feature, (left_col, right_col) in ASYMMETRY_COLUMNS.items():
+            features[feature] = (
+                calculate_asymmetry_variability_indice(
+                    extracted_data[left_col],
+                    extracted_data[right_col]
+                )
+            )
+
+        # ===== Calculate the bilateral ratio =====
+        bilateral_ratio = (
+            extracted_data['mean_act_bilateral'] / 
+            (
+                extracted_data['mean_act_unilateral_wrist_l'] +
+                extracted_data['mean_act_unilateral_wrist_r']
+            )
+        )
+        features['bilateral_wrist_ratio_index'] = bilateral_ratio
+
     else:
-        raise ValueError(f"Invalid dataset: {dataset}")
+        raise ValueError(f"Invalid dataset (variability indices): {dataset}")
 
     return pd.DataFrame(features)
 
