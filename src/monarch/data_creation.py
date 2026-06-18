@@ -109,7 +109,8 @@ def calculate_variance(
     return covariance
 
 def variation_dataset(
-        extracted_data: pd.DataFrame
+        extracted_data: pd.DataFrame,
+        sliding_window: bool = False
 ) -> pd.DataFrame:
     """
     Create a dataset containing the variability indices for all participants,
@@ -119,23 +120,53 @@ def variation_dataset(
 
     aggregated_rows: list = []
 
-    for group_keys, group_data in grouped:
-        row ={
-            'snr_id': group_keys[0],
-            'test_type': group_keys[1],
-            'timeline_stage': group_keys[2]
-        }
+    window_size: int = 300
 
-        for column in group_data.columns:
-            if column not in (
-                ['snr_id', 'test_type', 'timeline_stage'] + 
-                DLSM_NO_PCA
-                ):
-                row[f'CoV_{column} (%)'] = calculate_variance(
-                    group_data[column]
-                )
-            
-        aggregated_rows.append(row)
+    if sliding_window:
+        print("Welcome to sliding window data creation!")
+        for group_keys, group_data in grouped:
+            for start in range(0, len(group_data) - window_size + 1):
+                window = group_data.iloc[start:start + window_size]
+                
+                row ={
+                    'snr_id': group_keys[0],
+                    'test_type': group_keys[1],
+                    'timeline_stage': group_keys[2]
+                }
+
+                for column in group_data.columns:
+                    if column not in (
+                        ['snr_id', 'test_type', 'timeline_stage'] + 
+                        DLSM_NO_PCA
+                        ):
+                        mean = window[column].mean()
+                        std = window[column].std(ddof=0)
+
+                        row[f'CoV_{column} (%)'] = (
+                            std / (mean + EPSILON) * 100
+                        )
+                    
+                aggregated_rows.append(row)
+
+
+    else:
+        for group_keys, group_data in grouped:
+            row ={
+                'snr_id': group_keys[0],
+                'test_type': group_keys[1],
+                'timeline_stage': group_keys[2]
+            }
+
+            for column in group_data.columns:
+                if column not in (
+                    ['snr_id', 'test_type', 'timeline_stage'] + 
+                    DLSM_NO_PCA
+                    ):
+                    row[f'CoV_{column} (%)'] = calculate_variance(
+                        group_data[column]
+                    )
+                
+            aggregated_rows.append(row)
 
     cfg = config.Config.load_from_yaml()
 

@@ -17,6 +17,8 @@ import pandas as pd
 # Local Imports
 import monarch.config as config
 from monarch.data_analysis import (
+    DBSCAN_tuning,
+    KMeans_tuning,
     correlation_matrix,
     DBSCAN_clustering,
     KMeans_clustering,
@@ -34,7 +36,7 @@ from monarch.data_creation import (
 )
 
 def dataset_analysis(
-        dataset_name: str
+        dataset_name: str,
 ) -> None:
         # ===== Step 1: Data Extraction =====
     gait_data: pd.DataFrame = data_extraction(dataset_name)
@@ -46,8 +48,13 @@ def dataset_analysis(
         #    cleaned_gait_data
         #)
 
+        # If sliding window is enabled, we create a new dataset 
+        # with the variation of the gait parameters over time giving us more 
+        # data points to work with.
+        print("Creating variation dataset...")
         aggregated_data: pd.DataFrame = variation_dataset(
-            cleaned_gait_data
+            cleaned_gait_data,
+            sliding_window = True
         )
     else:
         aggregated_data: pd.DataFrame = cleaned_gait_data
@@ -65,7 +72,7 @@ def dataset_analysis(
     #    axis=1
     #)
 
-    full_data: pd.DataFrame = aggregated_data
+    full_data: pd.DataFrame = aggregated_data.dropna()
 
     # ===== Step 3: Data Normalisation =====
     normalised_data: pd.DataFrame = z_score_normalisation(
@@ -76,22 +83,24 @@ def dataset_analysis(
     print(normalised_data.head())
 
     # ===== Step 4: Correlation Matrix =====
-    correlation_matrix(normalised_data)
+    #correlation_matrix(normalised_data)
 
     # ===== Step 5: PCA Analysis =====
-    principal_components_8 = PCA_analysis(full_data, normalised_data)
+    principal_components = PCA_analysis(full_data, normalised_data)
 
     # ===== Step 6: UMAP Analysis =====
-    embedding_umap = UMAP_analysis(full_data, principal_components_8)
+    embedding_umap = UMAP_analysis(full_data, principal_components)
 
     # ===== Step 7: K-Means Clustering =====
-    KMeans_clustering(principal_components_8, embedding_umap)
+    #KMeans_tuning(principal_components)
+    KMeans_clustering(principal_components, embedding_umap)
 
     # ===== Step 8: DBSCAN Clustering =====
-    DBSCAN_clustering(principal_components_8, embedding_umap)
+    #DBSCAN_tuning(principal_components)
+    DBSCAN_clustering(principal_components, embedding_umap)
 
     # ===== Step 9: Hierarchical Clustering =====
-    hierarchical_clustering(principal_components_8, full_data)
+    #hierarchical_clustering(principal_components, full_data)
 
 
 def main() -> None:
