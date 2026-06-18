@@ -17,6 +17,7 @@ class Config:
     gait_parameters_folder: Path
     aggregated_dataset_path: Path
     exported_data_folder: Path
+    variance_dataset_path: Path
 
     @staticmethod
     def load_from_yaml(file_path: str | Path = "config.yaml") -> "Config":

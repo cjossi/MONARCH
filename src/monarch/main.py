@@ -29,6 +29,7 @@ from monarch.data_creation import (
     data_cleaning,
     data_extraction,
     calculate_variability_indices,
+    variation_dataset,
     z_score_normalisation
 )
 
@@ -41,22 +42,30 @@ def dataset_analysis(
     cleaned_gait_data: pd.DataFrame = data_cleaning(gait_data)
 
     if dataset_name != 'dataset_A':
-        aggregated_data: pd.DataFrame = aggregated_dataset(
+        #aggregated_data: pd.DataFrame = aggregated_dataset(
+        #    cleaned_gait_data
+        #)
+
+        aggregated_data: pd.DataFrame = variation_dataset(
             cleaned_gait_data
         )
     else:
         aggregated_data: pd.DataFrame = cleaned_gait_data
 
-    # ===== Step 2: Variability Indices Calculation =====
-    variability_indices: pd.DataFrame = calculate_variability_indices(
-        aggregated_data, 
-        dataset_name
-    )
+    print(aggregated_data.head())
 
-    full_data: pd.DataFrame = pd.concat(
-        [aggregated_data, variability_indices], 
-        axis=1
-    )
+    # ===== Step 2: Variability Indices Calculation =====
+    #variability_indices: pd.DataFrame = calculate_variability_indices(
+    #    aggregated_data, 
+    #    dataset_name
+    #)
+
+    #full_data: pd.DataFrame = pd.concat(
+    #    [aggregated_data, variability_indices], 
+    #    axis=1
+    #)
+
+    full_data: pd.DataFrame = aggregated_data
 
     # ===== Step 3: Data Normalisation =====
     normalised_data: pd.DataFrame = z_score_normalisation(
@@ -86,7 +95,7 @@ def dataset_analysis(
 
 
 def main() -> None:
-    dataset_analysis('dataset_A')
+    dataset_analysis('dataset_B')
 
     return None
 

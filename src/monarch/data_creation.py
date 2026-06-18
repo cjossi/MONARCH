@@ -71,13 +71,18 @@ def data_cleaning(extracted_data: pd.DataFrame) -> pd.DataFrame:
         print("Dropped 'Timestamp' column from the dataset.")
 
     # NaN check
+    print("Missing values (NaN) count per column:")
     print(extracted_data.isna().sum())
+
+    print("Percentage of missing values per column:")
     print(extracted_data.isna().mean() * 100)
 
     # Infinite values check
+    print("Infinite values count per column:")
     print(np.isinf(extracted_data.select_dtypes(include=np.number)).sum())
 
     # Check types
+    print("Data types of each column:")
     print(extracted_data.dtypes)
 
     # Impossible values check
@@ -88,12 +93,12 @@ def data_cleaning(extracted_data: pd.DataFrame) -> pd.DataFrame:
 # Mean, Standard Deviation and Covariance Calculation
 # ------------------------------------------------------------------------------
 
-def calculate_covariance(
+def calculate_variance(
         data: pd.Series
 ) -> float:
     """
-    Calculate the covariance of a pd.Series. This is done by the formula:
-    CoV = (std / mean) * 100
+    Calculate the variance of a pd.Series. This is done by the formula:
+    Var = (std / (mean + EPSILON)) * 100
     """
 
     mean: float = data.mean()
@@ -102,6 +107,48 @@ def calculate_covariance(
     covariance: float = (std / (mean + EPSILON)) * 100
 
     return covariance
+
+def variation_dataset(
+        extracted_data: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Create a dataset containing the variability indices for all participants,
+    test types and timeline stages.
+    """
+    grouped = extracted_data.groupby(['snr_id', 'test_type', 'timeline_stage'])
+
+    aggregated_rows: list = []
+
+    for group_keys, group_data in grouped:
+        row ={
+            'snr_id': group_keys[0],
+            'test_type': group_keys[1],
+            'timeline_stage': group_keys[2]
+        }
+
+        for column in group_data.columns:
+            if column not in (
+                ['snr_id', 'test_type', 'timeline_stage'] + 
+                DLSM_NO_PCA
+                ):
+                row[f'CoV_{column} (%)'] = calculate_variance(
+                    group_data[column]
+                )
+            
+        aggregated_rows.append(row)
+
+    cfg = config.Config.load_from_yaml()
+
+    aggregated_dataset_path: Path = cfg.aggregated_dataset_path
+
+    aggregated_df = pd.DataFrame(aggregated_rows)
+
+    aggregated_df.to_csv(
+        aggregated_dataset_path,
+        index=False
+    )
+
+    return aggregated_df
 
 def aggregated_dataset(
         extracted_data: pd.DataFrame
@@ -129,7 +176,7 @@ def aggregated_dataset(
                 ):
                 row[f'mean_{column}'] = group_data[column].mean()
                 row[f'std_{column}'] = group_data[column].std(ddof=0)
-                row[f'CoV_{column} (%)'] = calculate_covariance(
+                row[f'CoV_{column} (%)'] = calculate_variance(
                     group_data[column]
                 )
             

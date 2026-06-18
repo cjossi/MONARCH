@@ -1,6 +1,7 @@
 # Standard Imports
 
 # Third Party Imports
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -8,11 +9,14 @@ from scipy.cluster.hierarchy import (
     dendrogram,
     linkage
 )
+from scipy.spatial import ConvexHull
 from sklearn.cluster import (
     KMeans,
     DBSCAN
 )
 from sklearn.decomposition import PCA
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import silhouette_samples, silhouette_score
 import seaborn as sns
 import umap
 
@@ -24,20 +28,31 @@ import umap
 
 def correlation_matrix(df: pd.DataFrame) -> None:
     """
-    Create a correlation matrix to visualize the relationships between 
-    different gait parameters
+    Create Pearson and Spearman correlation matrices side by side.
     """
 
-    corr_matrix = df.corr()
+    pearson_corr_matrix = df.corr(method='pearson')
+    spearman_corr_matrix = df.corr(method='spearman')
 
     # Generate mask for lower triangle
-    mask = np.tril(np.ones_like(corr_matrix, dtype=bool))
+    mask = np.tril(np.ones_like(pearson_corr_matrix, dtype=bool))
 
-    plt.figure(figsize=(18, 14))
+    corr = spearman_corr_matrix.where(mask)
 
-    ax = sns.heatmap(
-        corr_matrix, 
-        annot=False, 
+    mean_abs_corr = corr.abs().stack().mean()
+
+    print(f'Mean absolute Spearman correlation: {mean_abs_corr:.4f}')
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(20, 8)
+    )
+
+    sns.heatmap(
+        pearson_corr_matrix, 
+        ax=axes[0],
+        annot=True,
         cmap='seismic', 
         mask=mask,
         vmin=-1, 
@@ -47,16 +62,28 @@ def correlation_matrix(df: pd.DataFrame) -> None:
         cbar_kws={"shrink": 0.8}
     )
 
-    ax.xaxis.tick_top()
+    axes[0].set_title('Pearson Correlation Matrix')
+    axes[0].xaxis.tick_top()
+    axes[0].tick_params(axis='x', rotation=90, labelsize=8)
+    axes[0].tick_params(axis='y', rotation=0, labelsize=8)
 
-    plt.xticks(rotation=45, ha='left', fontsize=9)
-    plt.yticks(rotation=0, fontsize=9)
-
-    plt.title(
-        "Correlation Matrix of Gait Parameters",
-        fontsize=16,
-        pad=20
+    sns.heatmap(
+        spearman_corr_matrix, 
+        ax=axes[1],
+        annot=True, 
+        cmap='seismic',
+        mask=mask,
+        vmin=-1, 
+        vmax=1,
+        center=0,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.8}
     )
+
+    axes[1].set_title('Spearman Correlation Matrix')
+    axes[1].xaxis.tick_top()
+    axes[1].tick_params(axis='x', rotation=90, labelsize=8)
+    axes[1].tick_params(axis='y', rotation=0, labelsize=8)
 
     plt.tight_layout()
     plt.show()
@@ -112,15 +139,16 @@ def PCA_analysis(
     )
 
     # ===== Biplot =====
-    principal_components_8 = PCA_biplot(
+    principal_components = PCA_biplot(
         original_data=original_data,
         normalised_data=normalised_data,
         features_names=normalised_data.columns.tolist(),
+        components=4,
         pc1=0,
         pc2=1
     )
 
-    return principal_components_8
+    return principal_components
 
 def Scree_plot(
         my_pca: PCA,
@@ -159,6 +187,7 @@ def PCA_biplot(
         original_data: pd.DataFrame,
         normalised_data: pd.DataFrame,
         features_names: list[str],
+        components: int = 8,
         pc1: int = 0,
         pc2: int = 1
 ) -> np.ndarray:
@@ -176,6 +205,8 @@ def PCA_biplot(
         and variability indices.
     features_names : list[str]
         List of feature names corresponding to the columns in normalised_data.
+    components : int, optional
+        The number of principal components to consider (default is 8).
     pc1 : int, optional
         The index of the first principal component to plot (default is 0).
     pc2 : int, optional
@@ -190,12 +221,12 @@ def PCA_biplot(
     # ===== PCA =====
     rank = np.linalg.matrix_rank(normalised_data)
     n_components: int = min(
-        8,
+        components,
         rank
     )
     pca_8: PCA = PCA(n_components=n_components)
 
-    principal_components_8: np.ndarray = pca_8.fit_transform(normalised_data)
+    principal_components: np.ndarray = pca_8.fit_transform(normalised_data)
 
     # ===== Participant IDs =====
     participant_ids: pd.Series = original_data['snr_id']
@@ -207,8 +238,8 @@ def PCA_biplot(
         mask = participant_ids == participant_id
 
         plt.scatter(
-            principal_components_8[mask, pc1],
-            principal_components_8[mask, pc2],
+            principal_components[mask, pc1],
+            principal_components[mask, pc2],
             label=f'Participant {participant_id}',
             alpha=0.7
         )
@@ -258,11 +289,11 @@ def PCA_biplot(
 
     plt.show()
 
-    return principal_components_8
+    return principal_components
 
 def UMAP_analysis(
         original_data: pd.DataFrame,
-        principal_components_8: np.ndarray
+        principal_components: np.ndarray
 ) -> np.ndarray:
     """
     Perform Uniform Manifold Approximation and Projection (UMAP) to 
@@ -272,7 +303,7 @@ def UMAP_analysis(
     ----------
     original_data : DataFrame
         The input DataFrame containing the original gait parameters.
-    principal_components_8 : np.ndarray
+    principal_components : np.ndarray
         The input array containing the first eight principal components.
 
     Returns
@@ -284,14 +315,14 @@ def UMAP_analysis(
     # tuning UMAP parameters for better separation of participants 
     # in the embedding space
     reducer = umap.UMAP(
-        n_neighbors=5,      # Local for small dataset
+        n_neighbors=15,     # Local for small dataset
         min_dist=0.3,       # Allow some clustering but not too tight
         n_components=2,
         random_state=42
     )
 
     embedding: np.ndarray = reducer.fit_transform(
-        principal_components_8
+        principal_components
     ) # type: ignore
 
     plt.figure(figsize=(12, 10))
@@ -319,20 +350,29 @@ def UMAP_analysis(
     return embedding
 
 def KMeans_clustering(
-        principal_components_8: np.ndarray,
+        principal_components: np.ndarray,
         embedding_umap: np.ndarray
 ) -> None:
     """
     Perform K-Means clustering to identify distinct groups of participants 
     based on their gait parameters.
+
+    Parameters
+    ----------
+    principal_components : np.ndarray
+        The input array containing the first principal components.
+    embedding_umap : np.ndarray
+        The UMAP embedding of the data.
     """
 
     kmeans = KMeans(
-        n_clusters=3,   # Chosen for a first attempt to identify distinct groups
+        n_clusters=8,   # Tuned using silhouette and inertia analysis
         random_state=42
     )
 
-    clusters = kmeans.fit_predict(principal_components_8)
+    clusters = kmeans.fit_predict(principal_components)
+
+    hull = ConvexHull(clusters)
 
     plt.figure(figsize=(12, 10))
 
@@ -351,8 +391,94 @@ def KMeans_clustering(
     plt.grid()
     plt.show()
 
+def KMeans_tuning(
+        principal_components: np.ndarray
+):
+    """
+    Tune KMeans parameters for better clustering of participants.
+    Silhouette & Inertia analysis can be used to determine the optimal number 
+    of clusters. Use of the scikit-learn example code.
+    https://scikit-learn.org/stable/auto_examples/cluster/
+    plot_kmeans_silhouette_analysis.html
+
+    Parameters
+    ----------
+    principal_components : np.ndarray
+        The input array containing the first principal components.
+    """
+
+    # =====Silhouette analysis=====
+    range_clusters = range(2, 50)
+
+    silhouette_avgs = []
+
+    for n_clusters in range_clusters:
+        clusters = KMeans(
+            n_clusters=n_clusters, 
+            random_state=42
+        )
+
+        cluster_labels = clusters.fit_predict(principal_components)
+
+        silhouette_avg = silhouette_score(
+            principal_components,
+            cluster_labels
+        )
+
+        silhouette_avgs.append(silhouette_avg)
+
+        print(
+            "For n_clusters =", n_clusters,
+            "The average silhouette_score is :", silhouette_avg
+        )
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        range_clusters,
+        silhouette_avgs,
+        marker='o'
+    )
+    plt.title('Silhouette Analysis for KMeans Clustering')
+    plt.xlabel('Number of Clusters')
+    plt.ylabel('Average Silhouette Score')
+    plt.grid()
+    plt.show()
+
+
+    # =====Inertia analysis=====
+    inertia_values = []
+
+    for n_clusters in range_clusters:
+        clusters = KMeans(
+            n_clusters=n_clusters, 
+            random_state=42
+        )
+
+        clusters.fit(principal_components)
+
+        inertia_values.append(clusters.inertia_)
+
+        print(
+            "For n_clusters =", n_clusters,
+            "The inertia is :", clusters.inertia_
+        )
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        range_clusters,
+        inertia_values,
+        marker='o'
+    )
+    plt.title('Inertia Analysis for KMeans Clustering')
+    plt.xlabel('Number of Clusters')
+    plt.ylabel('Inertia')
+    plt.grid()
+    plt.show()
+
+    return None
+
 def DBSCAN_clustering(
-        principal_components_8: np.ndarray,
+        principal_components: np.ndarray,
         embedding_umap: np.ndarray
 ) -> None:
     """
@@ -361,11 +487,11 @@ def DBSCAN_clustering(
     """
 
     dbscan = DBSCAN(
-        eps=0.1,
-        min_samples=2
+        eps=0.09,       # Tuned using k-distance graph
+        min_samples=5   # k = nb_dimension + 1 = 4 + 1
     )
 
-    cluster_dbscan = dbscan.fit_predict(principal_components_8)
+    cluster_dbscan = dbscan.fit_predict(principal_components)
 
     plt.figure(figsize=(12, 10))
 
@@ -384,8 +510,34 @@ def DBSCAN_clustering(
     plt.grid()
     plt.show()
 
+
+def DBSCAN_tuning(
+        principal_components: np.ndarray
+) -> None:
+    """
+    Tune DBSCAN parameters for better clustering of participants.
+    Use of k-distance graph to determine the optimal eps value.
+    """
+
+    neighbors = NearestNeighbors(n_neighbors=5)
+    neighbors_fit = neighbors.fit(principal_components)
+
+    distances, indices = neighbors_fit.kneighbors(principal_components)
+
+    distances = np.sort(distances[:, 4])
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(distances)
+    plt.xlabel('Sample Index')
+    plt.ylabel('Distance to 5th Nearest Neighbor')
+    plt.title('K-Distance Graph for DBSCAN Tuning')
+    plt.grid()
+    plt.show()
+
+    return None
+
 def hierarchical_clustering(
-        principal_components_8: np.ndarray,
+        principal_components: np.ndarray,
         original_data: pd.DataFrame
 ) -> None:
     """
@@ -394,7 +546,7 @@ def hierarchical_clustering(
     """
 
     linked = linkage(
-        principal_components_8, 
+        principal_components, 
         method='ward'
     )
 
