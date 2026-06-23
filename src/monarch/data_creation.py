@@ -123,7 +123,6 @@ def variation_dataset(
     window_size: int = 300
 
     if sliding_window:
-        print("Welcome to sliding window data creation!")
         for group_keys, group_data in grouped:
             for start in range(0, len(group_data) - window_size + 1):
                 window = group_data.iloc[start:start + window_size]
@@ -147,7 +146,6 @@ def variation_dataset(
                         )
                     
                 aggregated_rows.append(row)
-
 
     else:
         for group_keys, group_data in grouped:
@@ -482,6 +480,50 @@ def calculate_variability_indices(
         raise ValueError(f"Invalid dataset (variability indices): {dataset}")
 
     return pd.DataFrame(features)
+
+def dlsm_activity_profiles(
+        extracted_data: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Set the activity levels profiles for participant and timeline stages based
+    on the DLSM dataset.
+
+    Parameters
+    ----------
+    extracted_data : pd.DataFrame
+        The DataFrame containing the extracted dlsm parameters
+    
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the activity levels profiles for each participant
+        and timeline stage
+    """
+
+    grouped = extracted_data.groupby(['snr_id', 'timeline_stage'])
+
+    aggregated_rows: list = []
+
+    for group_keys, group_data in grouped:
+        row = {
+            'snr_id': group_keys[0],
+            'timeline_stage': group_keys[1]
+        }
+
+        sedentary_tot = group_data['Sedentary'].sum()
+        low_tot = group_data['Low'].sum()
+        moderate_tot = group_data['Moderate'].sum()
+        vigorous_tot = group_data['Vigorous'].sum()
+        total = sedentary_tot + low_tot + moderate_tot + vigorous_tot
+
+        row['sedentary_profile'] = sedentary_tot / total
+        row['low_profile'] = low_tot / total
+        row['moderate_profile'] = moderate_tot / total
+        row['vigorous_profile'] = vigorous_tot / total
+
+        aggregated_rows.append(row)
+
+    return pd.DataFrame(aggregated_rows)
 
 # ------------------------------------------------------------------------------
 # Normalisation

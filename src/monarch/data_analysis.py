@@ -352,7 +352,7 @@ def UMAP_analysis(
 def KMeans_clustering(
         principal_components: np.ndarray,
         embedding_umap: np.ndarray
-) -> None:
+) -> np.ndarray:
     """
     Perform K-Means clustering to identify distinct groups of participants 
     based on their gait parameters.
@@ -366,13 +366,11 @@ def KMeans_clustering(
     """
 
     kmeans = KMeans(
-        n_clusters=8,   # Tuned using silhouette and inertia analysis
+        n_clusters=4,   # Tuned using silhouette and inertia analysis = 8
         random_state=42
     )
 
     clusters = kmeans.fit_predict(principal_components)
-
-    hull = ConvexHull(clusters)
 
     plt.figure(figsize=(12, 10))
 
@@ -384,12 +382,45 @@ def KMeans_clustering(
         alpha=0.8
     )
 
+    for cluster_id in np.unique(clusters):
+        cluster_points = embedding_umap[clusters == cluster_id]
+
+        # =====Centroid plotting=====
+        centroid = cluster_points.mean(axis=0)
+
+        plt.scatter(
+            centroid[0],
+            centroid[1],
+            marker='X',
+            s=200,
+            c='red',
+            edgecolor='black',
+            label=f'Centroid {cluster_id}'
+        )
+
+        # ====Convex Hull plotting=====
+        if len(cluster_points) < 3:
+            continue
+
+        hull = ConvexHull(cluster_points)
+
+        for simplex in hull.simplices:
+            plt.plot(
+                cluster_points[simplex, 0],
+                cluster_points[simplex, 1],
+                'k-',
+                alpha=0.5,
+                linewidth=1
+            )
+
     plt.xlabel('UMAP Dimension 1')
     plt.ylabel('UMAP Dimension 2')
     plt.title('K-Means Clustering of Gait Data', fontsize=16)
 
     plt.grid()
     plt.show()
+
+    return clusters
 
 def KMeans_tuning(
         principal_components: np.ndarray
@@ -480,7 +511,7 @@ def KMeans_tuning(
 def DBSCAN_clustering(
         principal_components: np.ndarray,
         embedding_umap: np.ndarray
-) -> None:
+) -> np.ndarray:
     """
     Perform DBSCAN clustering to identify distinct groups of participants 
     based on their gait parameters.
@@ -503,6 +534,26 @@ def DBSCAN_clustering(
         alpha=0.8
     )
 
+    for cluster_id in np.unique(cluster_dbscan):
+        if cluster_id == -1:
+            continue
+
+        cluster_points = embedding_umap[cluster_dbscan == cluster_id]
+
+        if len(cluster_points) < 3:
+            continue
+
+        hull = ConvexHull(cluster_points)
+
+        for simplex in hull.simplices:
+            plt.plot(
+                cluster_points[simplex, 0],
+                cluster_points[simplex, 1],
+                'k-',
+                alpha=0.5,
+                linewidth=1
+            )
+
     plt.xlabel('UMAP Dimension 1')
     plt.ylabel('UMAP Dimension 2')
     plt.title('DBSCAN Clustering of Gait Data', fontsize=16)
@@ -510,6 +561,7 @@ def DBSCAN_clustering(
     plt.grid()
     plt.show()
 
+    return cluster_dbscan
 
 def DBSCAN_tuning(
         principal_components: np.ndarray
@@ -572,3 +624,84 @@ def hierarchical_clustering(
     plt.xticks(rotation=45, ha='right', fontsize=8)
 
     plt.show()
+
+def cluster_profiles(
+        full_data: pd.DataFrame,
+        clusters: np.ndarray,
+        embedding_umap: np.ndarray,
+        activity_profiles: pd.DataFrame
+) -> None:
+    """
+    Set the activity levels profiles for each cluster based on the DLSM dataset.
+    Example:
+        Cluster 1:
+            Sedentary: 20%
+            Low: 30%
+            Moderate: 30%
+            Vigorous: 20%
+    """
+
+    full_data['cluster'] = clusters
+
+    # Get the participats & timeline stages profile for each cluster.
+    merged_data = full_data.merge(
+        activity_profiles,
+        on=['snr_id', 'timeline_stage'],
+        how='left'
+    )
+
+    print(merged_data.head())
+
+    aggregated_row = []
+
+    for cluster_id in np.unique(clusters):
+        sedentary_total: float = merged_data.loc[
+            merged_data['cluster'] == cluster_id,
+            'sedentary_profile'
+        ].sum()
+
+        low_total: float = merged_data.loc[
+            merged_data['cluster'] == cluster_id,
+            'low_profile'
+        ].sum()
+
+        moderate_total: float = merged_data.loc[
+            merged_data['cluster'] == cluster_id,
+            'moderate_profile'
+        ].sum()
+
+        vigorous_total: float = merged_data.loc[
+            merged_data['cluster'] == cluster_id,
+            'vigorous_profile'
+        ].sum()
+
+        total: float = (sedentary_total 
+                        + low_total 
+                        + moderate_total 
+                        + vigorous_total)
+
+        participant_count = merged_data.loc[
+            merged_data['cluster'] == cluster_id, 
+            'snr_id'
+        ].nunique()
+
+        print(merged_data.groupby('cluster')['snr_id'].nunique())
+
+        windows_count = merged_data.groupby(
+            ['snr_id', 'timeline_stage']
+        )['cluster'].value_counts()
+        print(windows_count)
+
+        aggregated_row.append({
+            'cluster': cluster_id,
+            'sedentary_total': sedentary_total / total if total != 0 else 0,
+            'low_total': low_total / total if total != 0 else 0,
+            'moderate_total': moderate_total / total if total != 0 else 0,
+            'vigorous_total': vigorous_total / total if total != 0 else 0,
+            'participant_count': participant_count
+        })
+    
+    aggregated_data = pd.DataFrame(aggregated_row)
+
+    print(aggregated_data)
+

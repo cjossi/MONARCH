@@ -19,6 +19,7 @@ import monarch.config as config
 from monarch.data_analysis import (
     DBSCAN_tuning,
     KMeans_tuning,
+    cluster_profiles,
     correlation_matrix,
     DBSCAN_clustering,
     KMeans_clustering,
@@ -31,6 +32,7 @@ from monarch.data_creation import (
     data_cleaning,
     data_extraction,
     calculate_variability_indices,
+    dlsm_activity_profiles,
     variation_dataset,
     z_score_normalisation
 )
@@ -39,9 +41,9 @@ def dataset_analysis(
         dataset_name: str,
 ) -> None:
         # ===== Step 1: Data Extraction =====
-    gait_data: pd.DataFrame = data_extraction(dataset_name)
+    data: pd.DataFrame = data_extraction(dataset_name)
 
-    cleaned_gait_data: pd.DataFrame = data_cleaning(gait_data)
+    cleaned_data: pd.DataFrame = data_cleaning(data)
 
     if dataset_name != 'dataset_A':
         #aggregated_data: pd.DataFrame = aggregated_dataset(
@@ -53,11 +55,15 @@ def dataset_analysis(
         # data points to work with.
         print("Creating variation dataset...")
         aggregated_data: pd.DataFrame = variation_dataset(
-            cleaned_gait_data,
+            cleaned_data,
             sliding_window = True
         )
     else:
-        aggregated_data: pd.DataFrame = cleaned_gait_data
+        aggregated_data: pd.DataFrame = cleaned_data
+
+    dlsm_data: pd.DataFrame = data_cleaning(
+        data_extraction('dataset_dlsm')
+    )
 
     print(aggregated_data.head())
 
@@ -85,7 +91,7 @@ def dataset_analysis(
     # ===== Step 4: Correlation Matrix =====
     #correlation_matrix(normalised_data)
 
-    # ===== Step 5: PCA Analysis =====
+    # ===== Step 5: PCA Analysis ===== 
     principal_components = PCA_analysis(full_data, normalised_data)
 
     # ===== Step 6: UMAP Analysis =====
@@ -93,14 +99,24 @@ def dataset_analysis(
 
     # ===== Step 7: K-Means Clustering =====
     #KMeans_tuning(principal_components)
-    KMeans_clustering(principal_components, embedding_umap)
+    clusters_KMeans = KMeans_clustering(principal_components, embedding_umap)
 
     # ===== Step 8: DBSCAN Clustering =====
     #DBSCAN_tuning(principal_components)
-    DBSCAN_clustering(principal_components, embedding_umap)
+    clusters_DBSCAN = DBSCAN_clustering(principal_components, embedding_umap)
 
     # ===== Step 9: Hierarchical Clustering =====
     #hierarchical_clustering(principal_components, full_data)
+
+    # ==== Step 10: DLSM Linkage =====
+    activity_profiles = dlsm_activity_profiles(dlsm_data)
+
+    cluster_profiles(
+        full_data=full_data, 
+        clusters=clusters_KMeans, 
+        embedding_umap=embedding_umap, 
+        activity_profiles=activity_profiles
+    )
 
 
 def main() -> None:
