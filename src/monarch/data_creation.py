@@ -122,6 +122,7 @@ def variation_dataset(
 
     window_size: int = 300
 
+    # Sliding window. Size: 300, overlap: 299.
     if sliding_window:
         for group_keys, group_data in grouped:
             for start in range(0, len(group_data) - window_size + 1):

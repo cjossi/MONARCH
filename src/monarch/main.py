@@ -21,11 +21,17 @@ from monarch.data_analysis import (
     KMeans_tuning,
     cluster_profiles,
     correlation_matrix,
+    create_cov_long_dataframe,
     DBSCAN_clustering,
     KMeans_clustering,
+    get_spatio_temporal_distribution,
     hierarchical_clustering,
     PCA_analysis,
     UMAP_analysis,
+    paired_scatter_pre_post,
+    shapiro_test,
+    violin_boxplot_CoV,
+    wilcoxon_pre_post
 )
 from monarch.data_creation import (
     aggregated_dataset,
@@ -46,73 +52,91 @@ def dataset_analysis(
     cleaned_data: pd.DataFrame = data_cleaning(data)
 
     if dataset_name != 'dataset_A':
-        #aggregated_data: pd.DataFrame = aggregated_dataset(
-        #    cleaned_gait_data
-        #)
-
         # If sliding window is enabled, we create a new dataset 
         # with the variation of the gait parameters over time giving us more 
         # data points to work with.
-        print("Creating variation dataset...")
-        aggregated_data: pd.DataFrame = variation_dataset(
+        cov_window_data: pd.DataFrame = variation_dataset(
             cleaned_data,
             sliding_window = True
         )
+
+        cov_session_data: pd.DataFrame = variation_dataset(
+            cleaned_data,
+            sliding_window = False
+        )
     else:
-        aggregated_data: pd.DataFrame = cleaned_data
+        cov_session_data: pd.DataFrame = cleaned_data
+        cov_window_data: pd.DataFrame = cleaned_data
 
     dlsm_data: pd.DataFrame = data_cleaning(
         data_extraction('dataset_dlsm')
     )
 
-    print(aggregated_data.head())
+    # ===== Understanding the data =====
+    #get_spatio_temporal_distribution(cleaned_data)
 
-    # ===== Step 2: Variability Indices Calculation =====
-    #variability_indices: pd.DataFrame = calculate_variability_indices(
-    #    aggregated_data, 
-    #    dataset_name
+    #long_CoV = create_cov_long_dataframe(cleaned_data)
+
+    #violin_boxplot_CoV(long_CoV)
+
+    #shapiro_results = shapiro_test(long_CoV)
+    # We will take Wilcoxon test for the paired comparaison to be robust.
+
+    #wilcoxon_results = wilcoxon_pre_post(long_CoV)
+
+    #paired_scatter_pre_post(long_CoV)
+
+    #full_session_data: pd.DataFrame = cov_window_data.dropna()
+
+    #print(
+    #    f"Samples for lustering: {len(full_session_data)}"
     #)
 
-    #full_data: pd.DataFrame = pd.concat(
-    #    [aggregated_data, variability_indices], 
-    #    axis=1
+    # Data Normalisation
+    #normalised_session_data: pd.DataFrame = z_score_normalisation(
+    #    full_session_data, 
+    #    'global'
     #)
 
-    full_data: pd.DataFrame = aggregated_data.dropna()
+    #correlation_matrix(normalised_session_data)
 
-    # ===== Step 3: Data Normalisation =====
+    # ===== Analysis PCA/UMAP/Clustering =====
+    # Sliding window representation is used for unseupervised learning methods
+    # to capture local vvariability patterns and increase the numper of samples.
+    full_window_data: pd.DataFrame = cov_window_data.dropna()
+
+    print(
+        f"Samples for lustering: {len(full_window_data)}"
+    )
+
+    # Data Normalisation
     normalised_data: pd.DataFrame = z_score_normalisation(
-        full_data, 
+        full_window_data, 
         'global'
     )
 
-    print(normalised_data.head())
-
-    # ===== Step 4: Correlation Matrix =====
-    #correlation_matrix(normalised_data)
-
     # ===== Step 5: PCA Analysis ===== 
-    principal_components = PCA_analysis(full_data, normalised_data)
+    principal_components = PCA_analysis(full_window_data, normalised_data)
 
     # ===== Step 6: UMAP Analysis =====
-    embedding_umap = UMAP_analysis(full_data, principal_components)
+    embedding_umap = UMAP_analysis(full_window_data, principal_components)
 
     # ===== Step 7: K-Means Clustering =====
     #KMeans_tuning(principal_components)
     clusters_KMeans = KMeans_clustering(principal_components, embedding_umap)
 
     # ===== Step 8: DBSCAN Clustering =====
-    #DBSCAN_tuning(principal_components)
+    DBSCAN_tuning(principal_components)
     clusters_DBSCAN = DBSCAN_clustering(principal_components, embedding_umap)
 
     # ===== Step 9: Hierarchical Clustering =====
-    #hierarchical_clustering(principal_components, full_data)
+    #hierarchical_clustering(principal_components, full_window_data)
 
     # ==== Step 10: DLSM Linkage =====
     activity_profiles = dlsm_activity_profiles(dlsm_data)
 
     cluster_profiles(
-        full_data=full_data, 
+        full_data=full_window_data, 
         clusters=clusters_KMeans, 
         embedding_umap=embedding_umap, 
         activity_profiles=activity_profiles

@@ -10,6 +10,10 @@ from scipy.cluster.hierarchy import (
     linkage
 )
 from scipy.spatial import ConvexHull
+from scipy.stats import (
+    shapiro,
+    wilcoxon
+)
 from sklearn.cluster import (
     KMeans,
     DBSCAN
@@ -17,25 +21,470 @@ from sklearn.cluster import (
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import silhouette_samples, silhouette_score
+from statsmodels.stats.multitest import multipletests
 import seaborn as sns
 import umap
 
 # Local Imports
-
+from monarch.constant import EPSILON
+from monarch.data_creation import variation_dataset
 # ------------------------------------------------------------------------------
 # Data Analysis
 # ------------------------------------------------------------------------------
 
-def correlation_matrix(df: pd.DataFrame) -> None:
+def get_spatio_temporal_distribution(
+        dataset: pd.DataFrame
+):
     """
-    Create Pearson and Spearman correlation matrices side by side.
+    Returns the distribution of gait features in the dataset.
+    Only admission and discharge stages are considered.
+
+    Parameters
+    ----------
+    dataset : pd.DataFrame
+        The input DataFrame containing the dataset.
     """
 
-    pearson_corr_matrix = df.corr(method='pearson')
+    # Keep only available timeline stages
+    dataset = dataset[
+        dataset['timeline_stage'].isin(
+            ['admission', 'discharge']
+        )
+    ]
+
+    # Select only numerical gait features
+    excluded_columns = [
+        'snr_id',
+        'timeline_stage',
+        'test_type'
+    ]
+
+    features = [
+        col for col in dataset.columns
+        if col not in excluded_columns
+    ]
+
+    # Distribution by participant
+    for feature in features:
+
+        fig, axs = plt.subplots(
+            4, 2,
+            figsize=(12, 10)
+        )
+
+        axs = axs.flatten()
+
+        fig.suptitle(
+            f'Distribution of {feature} by Participant'
+        )
+
+        for i, participant in enumerate(
+            dataset['snr_id'].unique()
+        ):
+
+            participant_data = dataset[
+                dataset['snr_id'] == participant
+            ]
+
+            admission = participant_data.loc[
+                participant_data['timeline_stage'] == 'admission',
+                feature
+            ]
+
+            discharge = participant_data.loc[
+                participant_data['timeline_stage'] == 'discharge',
+                feature
+            ]
+
+            axs[i].hist(
+                admission,
+                bins=30,
+                alpha=0.7,
+                label='Admission',
+                color='blue'
+            )
+
+            axs[i].hist(
+                discharge,
+                bins=30,
+                alpha=0.7,
+                label='Discharge',
+                color='red'
+            )
+
+            axs[i].set_title(
+                f'Participant {participant}'
+            )
+
+            axs[i].legend()
+
+
+        for ax in axs.flat:
+            ax.set(
+                xlabel='Value',
+                ylabel='Frequency'
+            )
+
+        for ax in axs.flat:
+            ax.label_outer()
+
+        plt.tight_layout()
+        plt.show()
+
+
+    # Distribution full dataset
+    for feature in features:
+
+        admission = dataset.loc[
+            dataset['timeline_stage'] == 'admission',
+            feature
+        ]
+
+        discharge = dataset.loc[
+            dataset['timeline_stage'] == 'discharge',
+            feature
+        ]
+
+        plt.figure(figsize=(10, 6))
+
+        plt.hist(
+            admission,
+            bins=30,
+            alpha=0.7,
+            label='Admission',
+            color='blue'
+        )
+
+        plt.hist(
+            discharge,
+            bins=30,
+            alpha=0.7,
+            label='Discharge',
+            color='red'
+        )
+
+        plt.title(
+            f'Distribution of {feature} - Full Dataset'
+        )
+
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.legend()
+        plt.grid()
+
+        plt.show()
+
+    return None
+
+def create_cov_long_dataframe(
+        cleaned_data: pd.DataFrame
+) -> pd.DataFrame:
+    """"
+    Create a long-format DataFrame containing the CoV of each gait feature
+    for every participant and timeline stage.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns:
+            - 'snr_id': Participant ID
+            - 'timeline_stage': (admission, discharge, w3, w5, w7, FU1, FU2)
+            - 'test_type': Test type
+            - 'feature': Gait feature name
+            - 'CoV': Coefficient of Variation (CoV) value
+    """
+
+    grouped = cleaned_data.groupby(['snr_id', 'timeline_stage', 'test_type'])
+
+    rows = []
+
+    excluded_columns = [
+        'snr_id', 
+        'timeline_stage',
+        "test_type"
+    ]
+
+    for (participant, stage, test_type), group in grouped:
+        for feature in group.columns:
+            if feature in excluded_columns:
+                continue
+
+            mean = group[feature].mean()
+            std_dev = group[feature].std(ddof=0)
+
+            cov = std_dev / (mean + EPSILON) * 100 # CoV in percentage
+            
+            rows.append({
+                'snr_id': participant,
+                'timeline_stage': stage,
+                'test_type': test_type,
+                'feature': feature,
+                'CoV': cov
+            })
+    
+    return pd.DataFrame(rows)
+
+def violin_boxplot_CoV(
+        cov_dataframe: pd.DataFrame
+) -> None:
+    """
+    Plot the CoV distribution for each gait feature using both boxplots and
+    violin plots.
+    """
+
+    # ---------- Filter ----------
+    cov_dataframe = cov_dataframe[
+        cov_dataframe['timeline_stage'].isin(
+            ["admission", "discharge"]
+        )
+    ]
+
+    # ---------- Boxplot ----------
+    plt.figure(figsize=(16, 7))
+
+    sns.boxplot(
+        data=cov_dataframe,
+        x="feature",
+        y="CoV",
+        hue="timeline_stage",
+        showfliers=True
+    )
+
+    plt.title("Coefficient of Variation by Gait Feature")
+    plt.xlabel("")
+    plt.ylabel("Coefficient of Variation (%)")
+    plt.xticks(rotation=45, ha="right")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+    # ---------- Violin plot ----------
+    plt.figure(figsize=(16, 7))
+
+    sns.violinplot(
+        data=cov_dataframe,
+        x="feature",
+        y="CoV",
+        hue="timeline_stage",
+        inner="box",
+        cut=0
+    )
+
+    plt.title("Distribution of the Coefficient of Variation")
+    plt.xlabel("")
+    plt.ylabel("Coefficient of Variation (%)")
+    plt.xticks(rotation=45, ha="right")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+def shapiro_test(
+        cov_dataframe: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Perform a Shapiro-Wilk normality test on every gait feature.
+    
+    Returns
+    -------
+    pd.DataFrame
+        Summary of p-values and recommended statistical test.
+    """
+
+    results = []
+
+    for feature in cov_dataframe["feature"].unique():
+        values = cov_dataframe.loc[
+            cov_dataframe["feature"] == feature,
+            "CoV"
+        ].dropna()
+
+        stat, p_value = shapiro(values)
+
+        results.append(
+            {
+                "feature": feature,
+                "W": stat,
+                "p_value": p_value,
+                "normality": "Normal" if p_value > 0.05 
+                            else "Non-Normal",
+                "recommended_test": "Paired t-test" if p_value > 0.05 
+                                    else "Wilcoxon signed-rank"
+            }
+        )
+
+    results = pd.DataFrame(results)
+
+    print(results)
+
+    return results
+
+def wilcoxon_pre_post(
+        cov_dataframe: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Compare Admission vs Discharge CoV for each gait feature using
+    the Wilcoxon signed-rank test.
+    """
+
+    # Keep only Admission / Discharge
+    data = cov_dataframe[
+        cov_dataframe["timeline_stage"].isin(
+            ["admission", "discharge"]
+        )
+    ]
+
+    results = []
+
+    for feature in sorted(data["feature"].unique()):
+        feature_data = data[
+            data["feature"] == feature
+        ]
+
+        print(feature_data[
+            ["snr_id", "test_type", "timeline_stage", "CoV"]
+        ].sort_values(["snr_id", "test_type", "timeline_stage"]))
+
+        print(feature_data.groupby(
+            ["snr_id", "test_type", "timeline_stage"]
+        ).size())
+
+        pivot = feature_data.pivot_table(
+            index=["snr_id", "test_type"],
+            columns="timeline_stage",
+            values="CoV"
+        ).dropna()
+
+        n = len(pivot)
+
+        if n < 2:
+            results.append({
+                "feature": feature,
+                "n_pairs": n,
+                "W": None,
+                "p_value": None,
+                "significant": None
+            })
+            continue
+
+        statistic, p = wilcoxon(
+            pivot["admission"],
+            pivot["discharge"]
+        )
+
+        results.append({
+            "feature": feature,
+            "n_pairs": n,
+            "W": statistic,
+            "p_value": p,
+            "significant": p < 0.05
+        })
+
+    results = pd.DataFrame(results)
+
+    # Benjamini-Hochberg correction
+    valid = results["p_value"].notna()
+
+    corrected = multipletests(
+        results.loc[valid, "p_value"],
+        alpha=0.05,
+        method="fdr_bh"
+    )
+
+    results["p_value_corrected"] = None
+    results["significant_corrected"] = None
+
+    results.loc[valid, "p_value_corrected"] = corrected[1]
+    results.loc[valid, "significant_corrected"] = corrected[0]
+
+    print(results)
+
+    return results
+
+def paired_scatter_pre_post(
+        cov_dataframe: pd.DataFrame
+) -> None:
+    """
+    Plot paired admission vs discharge CoV values for each gait feature.
+
+    Each line represents a participant evolution between admission and
+    discharge.
+
+    Parameters
+    ----------
+    cov_dataframe : pd.DataFrame
+        Long-format CoV dataframe from create_cov_long_dataframe().
+    """
+
+    data = cov_dataframe[
+        cov_dataframe["timeline_stage"].isin(
+            ["admission", "discharge"]
+        )
+    ]
+
+    features = sorted(data["feature"].unique())
+
+    for feature in features:
+
+        feature_data = data[
+            data["feature"] == feature
+        ]
+
+        pivot = feature_data.pivot_table(
+            index=["snr_id", "test_type"],
+            columns="timeline_stage",
+            values="CoV"
+        ).dropna()
+
+        if len(pivot) < 2:
+            continue
+
+        plt.figure(figsize=(5, 5))
+
+        x_positions = [0, 1]
+
+        for _, row in pivot.iterrows():
+
+            plt.plot(
+                x_positions,
+                [
+                    row["admission"],
+                    row["discharge"]
+                ],
+                marker="o",
+                alpha=0.7
+            )
+
+        plt.xticks(
+            x_positions,
+            ["Admission", "Discharge"]
+        )
+
+        plt.ylabel("Coefficient of Variation (%)")
+        plt.title(
+            f"Pre/Post CoV evolution\n{feature}"
+        )
+
+        plt.grid(
+            axis="y",
+            alpha=0.3
+        )
+
+        plt.tight_layout()
+        plt.show()
+
+
+def correlation_matrix(df: pd.DataFrame) -> None:
+    """
+    Create Spearman correlation matrix.
+    """
+
+    # Check if the distribution is normal to see if we use spearman or pearson
+    # correlation. Pearson is normal and spearman is non-normal.
+
     spearman_corr_matrix = df.corr(method='spearman')
 
     # Generate mask for lower triangle
-    mask = np.tril(np.ones_like(pearson_corr_matrix, dtype=bool))
+    mask = np.tril(np.ones_like(spearman_corr_matrix, dtype=bool))
 
     corr = spearman_corr_matrix.where(mask)
 
@@ -43,33 +492,10 @@ def correlation_matrix(df: pd.DataFrame) -> None:
 
     print(f'Mean absolute Spearman correlation: {mean_abs_corr:.4f}')
 
-    fig, axes = plt.subplots(
-        1,
-        2,
-        figsize=(20, 8)
-    )
-
-    sns.heatmap(
-        pearson_corr_matrix, 
-        ax=axes[0],
-        annot=True,
-        cmap='seismic', 
-        mask=mask,
-        vmin=-1, 
-        vmax=1,
-        center=0,
-        linewidths=0.5,
-        cbar_kws={"shrink": 0.8}
-    )
-
-    axes[0].set_title('Pearson Correlation Matrix')
-    axes[0].xaxis.tick_top()
-    axes[0].tick_params(axis='x', rotation=90, labelsize=8)
-    axes[0].tick_params(axis='y', rotation=0, labelsize=8)
+    fig = plt.figure(figsize=(12, 10))
 
     sns.heatmap(
         spearman_corr_matrix, 
-        ax=axes[1],
         annot=True, 
         cmap='seismic',
         mask=mask,
@@ -80,15 +506,18 @@ def correlation_matrix(df: pd.DataFrame) -> None:
         cbar_kws={"shrink": 0.8}
     )
 
-    axes[1].set_title('Spearman Correlation Matrix')
-    axes[1].xaxis.tick_top()
-    axes[1].tick_params(axis='x', rotation=90, labelsize=8)
-    axes[1].tick_params(axis='y', rotation=0, labelsize=8)
+    plt.title('Spearman Correlation Matrix')
+    plt.tick_params(axis='x', rotation=45, labelsize=8)
+    plt.tick_params(axis='y', rotation=0, labelsize=8)
 
     plt.tight_layout()
     plt.show()
 
     return None
+
+# ------------------------------------------------------------------------------
+# Data Analysis Exploratory
+# ------------------------------------------------------------------------------
 
 def PCA_analysis(
         original_data: pd.DataFrame,
@@ -366,7 +795,7 @@ def KMeans_clustering(
     """
 
     kmeans = KMeans(
-        n_clusters=4,   # Tuned using silhouette and inertia analysis = 8
+        n_clusters=8,   # Tuned using silhouette and inertia analysis = 8
         random_state=42
     )
 
@@ -437,6 +866,9 @@ def KMeans_tuning(
     principal_components : np.ndarray
         The input array containing the first principal components.
     """
+
+    # ADD Ari score for stability of clustering.
+
 
     # =====Silhouette analysis=====
     range_clusters = range(2, 50)
