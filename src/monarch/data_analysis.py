@@ -3,6 +3,7 @@
 # Third Party Imports
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 import numpy as np
 import pandas as pd
 from scipy.cluster.hierarchy import (
@@ -225,19 +226,29 @@ def create_cov_long_dataframe(
     return pd.DataFrame(rows)
 
 def violin_boxplot_CoV(
-        cov_dataframe: pd.DataFrame
+        stroke_cov_dataframe: pd.DataFrame,
+        healthy_cov_dataframe: pd.DataFrame
 ) -> None:
     """
     Plot the CoV distribution for each gait feature using both boxplots and
     violin plots.
     """
 
+    #healthy_cov_dataframe['timeline_stage'] = "healthy"
+
+    cov_dataframe = pd.concat(
+        [stroke_cov_dataframe, healthy_cov_dataframe],
+        ignore_index=True
+    )
+
     # ---------- Filter ----------
     cov_dataframe = cov_dataframe[
         cov_dataframe['timeline_stage'].isin(
-            ["admission", "discharge"]
+            ["healthy", "admission", "discharge"]
         )
     ]
+
+    hue_order = ["healthy", "admission", "discharge"]
 
     # ---------- Boxplot ----------
     plt.figure(figsize=(16, 7))
@@ -247,6 +258,7 @@ def violin_boxplot_CoV(
         x="feature",
         y="CoV",
         hue="timeline_stage",
+        hue_order=hue_order,
         showfliers=True
     )
 
@@ -266,6 +278,7 @@ def violin_boxplot_CoV(
         x="feature",
         y="CoV",
         hue="timeline_stage",
+        hue_order=hue_order,
         inner="box",
         cut=0
     )
@@ -472,8 +485,10 @@ def paired_scatter_pre_post(
         plt.tight_layout()
         plt.show()
 
-
-def correlation_matrix(df: pd.DataFrame) -> None:
+def correlation_matrix(
+        df: pd.DataFrame,
+        title: str = "Spearman Correlation Matrix"
+) -> None:
     """
     Create Spearman correlation matrix.
     """
@@ -483,14 +498,22 @@ def correlation_matrix(df: pd.DataFrame) -> None:
 
     spearman_corr_matrix = df.corr(method='spearman')
 
+    upper_triangle = np.triu(
+        np.ones_like(spearman_corr_matrix, dtype=bool),
+        k=1
+    )
+    mean_abs_corr = (
+        spearman_corr_matrix.where(upper_triangle)
+        .stack()
+        .abs()
+        .mean()
+    )
+
+    print(f'{title}')
+    print(f'Mean absolute Spearman correlation: {mean_abs_corr:.4f}')
+
     # Generate mask for lower triangle
     mask = np.tril(np.ones_like(spearman_corr_matrix, dtype=bool))
-
-    corr = spearman_corr_matrix.where(mask)
-
-    mean_abs_corr = corr.abs().stack().mean()
-
-    print(f'Mean absolute Spearman correlation: {mean_abs_corr:.4f}')
 
     fig = plt.figure(figsize=(12, 10))
 
@@ -506,7 +529,7 @@ def correlation_matrix(df: pd.DataFrame) -> None:
         cbar_kws={"shrink": 0.8}
     )
 
-    plt.title('Spearman Correlation Matrix')
+    plt.title(title)
     plt.tick_params(axis='x', rotation=45, labelsize=8)
     plt.tick_params(axis='y', rotation=0, labelsize=8)
 
@@ -521,7 +544,7 @@ def correlation_matrix(df: pd.DataFrame) -> None:
 
 def PCA_analysis(
         original_data: pd.DataFrame,
-        normalised_data: pd.DataFrame
+        normalised_data: pd.DataFrame,
 ) -> np.ndarray:
     """
     Perform Principal Component Analysis (PCA) to reduce dimensionality 
@@ -814,6 +837,13 @@ def KMeans_clustering(
     for cluster_id in np.unique(clusters):
         cluster_points = embedding_umap[clusters == cluster_id]
 
+        # Principal Component of each cluster
+        cluster_pc = principal_components[clusters == cluster_id]
+
+        cluster_center = cluster_pc.mean(axis=0)
+
+        dominant_pc = np.argmax(np.abs(cluster_center)) + 1
+
         # =====Centroid plotting=====
         centroid = cluster_points.mean(axis=0)
 
@@ -821,10 +851,20 @@ def KMeans_clustering(
             centroid[0],
             centroid[1],
             marker='X',
-            s=200,
+            s=100,
             c='red',
             edgecolor='black',
             label=f'Centroid {cluster_id}'
+        )
+        plt.text(
+            centroid[0],
+            centroid[1] + 0.25,
+            f"Centroid {cluster_id} (PC{dominant_pc})",
+            color='white',
+            fontsize=8,
+            ha='center',
+            va='bottom',
+            path_effects=[pe.withStroke(linewidth=2, foreground='black')]
         )
 
         # ====Convex Hull plotting=====
@@ -868,6 +908,8 @@ def KMeans_tuning(
     """
 
     # ADD Ari score for stability of clustering.
+    # Note: Not possible for the moment, because we don't have the ground truth 
+    # labels for the clusters.
 
 
     # =====Silhouette analysis=====
@@ -950,7 +992,7 @@ def DBSCAN_clustering(
     """
 
     dbscan = DBSCAN(
-        eps=0.09,       # Tuned using k-distance graph
+        eps=0.09,       # Tuned using k-distance graph, current 0.09
         min_samples=5   # k = nb_dimension + 1 = 4 + 1
     )
 

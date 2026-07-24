@@ -50,6 +50,10 @@ def data_extraction(
         gait_parameters = pd.read_csv(
             gait_parameters_folder / 'gait_parameters_clinical.csv'
         )
+    elif dataset == 'healthy_dataset':
+        gait_parameters = pd.read_csv(
+            gait_parameters_folder / 'gait_parameters_healthy.csv'
+        )
     else:
         raise ValueError(f"Invalid dataset for data extraction: {dataset}")
 
@@ -535,7 +539,7 @@ def z_score_normalisation(
         normalisation_type: str
 ) -> pd.DataFrame:
     """
-    Compute the z-score normalization for all variability indices.
+    Compute the z-score normalisation for all variability indices.
     
     Parameters
     ----------
@@ -543,13 +547,13 @@ def z_score_normalisation(
         The DataFrame containing the extracted gait parameters
 
     normalisation_type : str
-        The type of normalization to be applied 
+        The type of normalisation to be applied 
         (e.g., 'global', 'per participant')
 
     Returns
     -------
     pd.DataFrame
-        A DataFrame containing the normalized values of the variability indices
+        A DataFrame containing the normalised values of the variability indices
     """
 
     data: pd.DataFrame = extracted_data.drop(columns=[
